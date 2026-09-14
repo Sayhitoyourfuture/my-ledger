@@ -4,16 +4,35 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>내 가계부</title>
+    <link rel="apple-touch-icon" href="budgetimagefile2.png">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; padding-bottom: 80px; }
         .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        h2 { margin-top: 0; font-size: 1.2rem; color: #555; }
+        
+        /* 네비게이션 탭 */
+        .top-nav { display: flex; gap: 10px; margin-bottom: 20px; }
+        .top-nav button { flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; background: #eee; color: #555; }
+        .top-nav button.active { background: #007aff; color: white; }
+
+        h2 { margin-top: 0; font-size: 1.2rem; color: #555; text-align: center; }
         .total-balance { font-size: 2rem; font-weight: bold; margin-bottom: 20px; text-align: center; }
-        .chart-container { position: relative; height: 250px; width: 100%; margin-bottom: 30px; }
+        .chart-container { position: relative; height: 250px; width: 100%; margin-bottom: 20px; }
+        
+        /* 은행 버튼 목록 */
+        .bank-cards { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 30px; justify-content: center; }
+        .bank-card { padding: 12px 16px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 12px; cursor: pointer; font-weight: bold; text-align: center; flex: 1; min-width: 120px; transition: 0.2s; }
+        .bank-card:hover { background: #e2e6ea; }
+
+        .sync-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-sync { flex: 1; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: white; }
+        .btn-export { background: #34c759; }
+        .btn-import { background: #ff9500; }
+
         .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
         .btn-group button { flex: 1; padding: 10px; border: none; border-radius: 8px; background: #eee; cursor: pointer; font-weight: bold; }
         .btn-group button.active { background: #007aff; color: white; }
+
         .transaction-list { list-style: none; padding: 0; margin: 0; }
         .transaction-item { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #eee; }
         .transaction-item:last-child { border-bottom: none; }
@@ -24,39 +43,78 @@
         .income { color: #34c759; }
         .expense { color: #ff3b30; }
         
-        /* Modal & FAB */
-        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #007aff; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 12px rgba(0,122,255,0.4); cursor: pointer; border: none; }
-        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #007aff; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 12px rgba(0,122,255,0.4); cursor: pointer; border: none; z-index: 900;}
+        
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 999;}
         .modal-content { background: white; padding: 20px; border-radius: 16px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
         .modal-content input, .modal-content select { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; }
+        .modal-content .date-hint { font-size: 0.8rem; color: #888; margin-top: -10px; margin-bottom: 5px; }
         .modal-buttons { display: flex; gap: 10px; margin-top: 10px; }
-        .btn-save { background: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; flex: 1; font-weight: bold; }
-        .btn-cancel { background: #eee; color: #333; border: none; padding: 12px; border-radius: 8px; flex: 1; font-weight: bold; }
+        .btn-save { background: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; flex: 1; font-weight: bold; cursor: pointer; }
+        .btn-cancel { background: #eee; color: #333; border: none; padding: 12px; border-radius: 8px; flex: 1; font-weight: bold; cursor: pointer; }
+        
+        .view-section { display: none; }
+        .view-section.active { display: block; }
+        
+        .back-btn { background: #eee; border: none; padding: 10px 15px; border-radius: 8px; cursor: pointer; font-weight: bold; margin-bottom: 20px; display: inline-block; }
+        
+        .stat-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #eee; }
+        .stat-label { font-weight: bold; }
+        .stat-values span { display: inline-block; width: 100px; text-align: right; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>총 잔액</h2>
-    <div class="total-balance" id="totalBalance">0원</div>
-    
-    <div class="chart-container">
-        <canvas id="balanceChart"></canvas>
+    <div class="top-nav">
+        <button id="navMain" class="active" onclick="switchMainTab('main')">내 지갑</button>
+        <button id="navStats" onclick="switchMainTab('stats')">통계</button>
     </div>
 
-    <div class="btn-group">
-        <button class="active">전체</button>
-        <button>일별</button>
-        <button>월별</button>
+    <!-- 1. 메인 뷰 -->
+    <div id="view-main" class="view-section active">
+        <h2>총 잔액</h2>
+        <div class="total-balance" id="totalBalance">0원</div>
+        
+        <div class="chart-container">
+            <canvas id="balanceChart"></canvas>
+        </div>
+
+        <div class="bank-cards" id="bankCards"></div>
+
+        <div class="sync-group">
+            <button class="btn-sync btn-export" onclick="exportData()">데이터 백업</button>
+            <button class="btn-sync btn-import" onclick="document.getElementById('fileInput').click()">데이터 복구</button>
+            <input type="file" id="fileInput" style="display: none;" accept=".json" onchange="importData(event)">
+        </div>
+
+        <h3>전체 내역</h3>
+        <ul class="transaction-list" id="transactionList"></ul>
     </div>
 
-    <ul class="transaction-list" id="transactionList">
-        <!-- 거래 내역이 여기에 렌더링됨 -->
-    </ul>
+    <!-- 2. 은행 상세 뷰 -->
+    <div id="view-bankDetail" class="view-section">
+        <button class="back-btn" onclick="switchMainTab('main')">← 뒤로 가기</button>
+        <h2 id="detailBankName">은행 이름</h2>
+        <div class="total-balance" id="detailBankBalance">0원</div>
+        <ul class="transaction-list" id="detailTransactionList"></ul>
+    </div>
+
+    <!-- 3. 통계 뷰 -->
+    <div id="view-stats" class="view-section">
+        <div class="btn-group" id="statsBtnGroup">
+            <button class="active" onclick="renderStats('day', this)">일별</button>
+            <button onclick="renderStats('month', this)">월별</button>
+            <button onclick="renderStats('year', this)">연별</button>
+            <button onclick="renderStats('category', this)">항목별</button>
+        </div>
+        <div id="statsContent"></div>
+    </div>
 </div>
 
 <button class="fab" onclick="openModal()">+</button>
 
+<!-- 입력 모달 -->
 <div class="modal" id="inputModal">
     <div class="modal-content">
         <select id="type" onchange="toggleTransferBank()">
@@ -64,19 +122,17 @@
             <option value="income">수입</option>
             <option value="transfer">이체</option>
         </select>
-        <input type="datetime-local" id="date">
+        
+        <input type="text" id="date" placeholder="YYYY-MM-DD HH:MM">
+        <div class="date-hint">예: 2026-09-14 15:55 (직접 수정하세요)</div>
+        
         <input type="number" id="amount" placeholder="금액 (숫자만)">
         <input type="text" id="category" placeholder="항목 (예: 식비, 월급)">
-        <select id="bank">
-            <option value="00은행">00은행</option>
-            <option value="토스뱅크">토스뱅크</option>
-            <option value="국민은행">국민은행</option>
-        </select>
-        <select id="toBank" style="display: none;">
-            <option value="토스뱅크">토스뱅크</option>
-            <option value="00은행">00은행</option>
-            <option value="국민은행">국민은행</option>
-        </select>
+        
+        <input type="text" id="bank" list="bankList" placeholder="출금/기준 은행 직접 입력">
+        <input type="text" id="toBank" list="bankList" placeholder="도착 은행 직접 입력" style="display: none;">
+        <datalist id="bankList"></datalist>
+
         <input type="text" id="note" placeholder="비고 (선택사항)">
         
         <div class="modal-buttons">
@@ -88,11 +144,18 @@
 
 <script>
     let transactions = JSON.parse(localStorage.getItem('ledger_data')) || [];
+    let bankColors = JSON.parse(localStorage.getItem('bank_colors')) || {};
     let chartInstance = null;
 
     function init() {
-        document.getElementById('date').value = new Date().toISOString().slice(0, 16);
         updateDashboard();
+    }
+
+    // 날짜 포맷 자동 생성 (YYYY-MM-DD HH:MM)
+    function getFormattedDate() {
+        const now = new Date();
+        const pad = n => n.toString().padStart(2, '0');
+        return `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
     }
 
     function toggleTransferBank() {
@@ -101,25 +164,68 @@
         toBank.style.display = type === 'transfer' ? 'block' : 'none';
     }
 
+    // 특정 은행의 현재 잔액 계산 함수
+    function getBankBalance(bankName) {
+        let bal = 0;
+        transactions.forEach(t => {
+            if (t.bank === bankName) {
+                if (t.type === 'income') bal += t.amount;
+                else if (t.type === 'expense' || t.type === 'transfer') bal -= t.amount;
+            }
+            if (t.toBank === bankName && t.type === 'transfer') {
+                bal += t.amount;
+            }
+        });
+        return bal;
+    }
+
     function saveTransaction() {
         const type = document.getElementById('type').value;
-        const data = {
-            id: Date.now(),
-            type: type,
-            date: document.getElementById('date').value,
-            amount: parseInt(document.getElementById('amount').value),
-            category: document.getElementById('category').value,
-            bank: document.getElementById('bank').value,
-            toBank: type === 'transfer' ? document.getElementById('toBank').value : null,
-            note: document.getElementById('note').value
-        };
+        const dateVal = document.getElementById('date').value.trim();
+        const amount = parseInt(document.getElementById('amount').value);
+        const bank = document.getElementById('bank').value.trim();
+        const toBank = document.getElementById('toBank').value.trim();
 
-        if (!data.amount || !data.category) {
-            alert('금액과 항목을 입력해.');
+        // 수동 날짜 유효성 검사
+        const dateRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
+        if (!dateRegex.test(dateVal)) {
+            alert('날짜를 YYYY-MM-DD HH:MM 형식으로 정확히 입력해 주세요.');
             return;
         }
 
-        transactions.unshift(data); // 최신 항목을 위로
+        if (!amount || !document.getElementById('category').value || !bank) {
+            alert('금액, 항목, 은행을 모두 입력해 주세요.');
+            return;
+        }
+        if (type === 'transfer' && !toBank) {
+            alert('이체할 도착 은행을 입력해 주세요.');
+            return;
+        }
+
+        // 잔액 부족 검증 (지출, 이체 시)
+        if (type === 'expense' || type === 'transfer') {
+            const currentBal = getBankBalance(bank);
+            if (amount > currentBal) {
+                alert(`잔액이 부족합니다.\n현재 ${bank} 잔액: ${currentBal.toLocaleString()}원\n입력 금액: ${amount.toLocaleString()}원`);
+                return;
+            }
+        }
+
+        const data = {
+            id: Date.now(),
+            type: type,
+            date: dateVal,
+            amount: amount,
+            category: document.getElementById('category').value,
+            bank: bank,
+            toBank: type === 'transfer' ? toBank : null,
+            note: document.getElementById('note').value
+        };
+
+        // 최신 날짜 순으로 정렬하기 위해 추가 후 정렬
+        transactions.push(data);
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
         localStorage.setItem('ledger_data', JSON.stringify(transactions));
         
         closeModal();
@@ -129,14 +235,22 @@
         document.getElementById('amount').value = '';
         document.getElementById('category').value = '';
         document.getElementById('note').value = '';
+        document.getElementById('bank').value = '';
+        document.getElementById('toBank').value = '';
     }
 
     function updateDashboard() {
-        let balances = { '00은행': 0, '토스뱅크': 0, '국민은행': 0 };
+        let balances = {};
         let total = 0;
+        let uniqueBanks = new Set();
 
-        // 잔액 계산 로직
         transactions.forEach(t => {
+            if (t.bank && !balances[t.bank]) balances[t.bank] = 0;
+            if (t.toBank && !balances[t.toBank]) balances[t.toBank] = 0;
+
+            if (t.bank) uniqueBanks.add(t.bank);
+            if (t.toBank) uniqueBanks.add(t.toBank);
+
             if (t.type === 'income') {
                 balances[t.bank] += t.amount;
                 total += t.amount;
@@ -149,15 +263,70 @@
             }
         });
 
+        // 자동완성 데이터리스트 업데이트
+        const bankList = document.getElementById('bankList');
+        bankList.innerHTML = '';
+        uniqueBanks.forEach(bank => {
+            const option = document.createElement('option');
+            option.value = bank;
+            bankList.appendChild(option);
+        });
+
         document.getElementById('totalBalance').innerText = total.toLocaleString() + '원';
-        drawChart(balances);
-        renderList();
+        
+        let filteredBalances = {};
+        for (let bank in balances) {
+            if (balances[bank] !== 0) filteredBalances[bank] = balances[bank];
+        }
+        
+        drawChart(filteredBalances);
+        renderBankCards(filteredBalances);
+        renderList(transactions, 'transactionList');
+        
+        // 현재 통계 화면이 열려있다면 새로고침
+        if(document.getElementById('view-stats').classList.contains('active')) {
+            const activeBtn = document.querySelector('#statsBtnGroup button.active');
+            if(activeBtn) activeBtn.click();
+        }
+    }
+
+    // 은행 카드 목록 생성
+    function renderBankCards(balances) {
+        const container = document.getElementById('bankCards');
+        container.innerHTML = '';
+        for (let bank in balances) {
+            const card = document.createElement('div');
+            card.className = 'bank-card';
+            card.innerHTML = `<div>${bank}</div><div style="color:#007aff; margin-top:5px;">${balances[bank].toLocaleString()}원</div>`;
+            card.onclick = () => openBankDetail(bank, balances[bank]);
+            container.appendChild(card);
+        }
+    }
+
+    // 은행 상세 화면 열기
+    function openBankDetail(bankName, balance) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.getElementById('view-bankDetail').classList.add('active');
+        
+        document.getElementById('detailBankName').innerText = bankName;
+        document.getElementById('detailBankBalance').innerText = balance.toLocaleString() + '원';
+        
+        const filtered = transactions.filter(t => t.bank === bankName || t.toBank === bankName);
+        renderList(filtered, 'detailTransactionList', bankName);
     }
 
     function drawChart(balances) {
         const ctx = document.getElementById('balanceChart').getContext('2d');
         const labels = Object.keys(balances);
         const data = Object.values(balances);
+
+        const colors = labels.map(bank => {
+            if (!bankColors[bank]) {
+                bankColors[bank] = `hsl(${Math.floor(Math.random() * 360)}, 70%, 60%)`;
+                localStorage.setItem('bank_colors', JSON.stringify(bankColors));
+            }
+            return bankColors[bank];
+        });
 
         if (chartInstance) chartInstance.destroy();
 
@@ -167,7 +336,7 @@
                 labels: labels,
                 datasets: [{
                     data: data,
-                    backgroundColor: ['#007aff', '#34c759', '#ffcc00'],
+                    backgroundColor: colors,
                     borderWidth: 0
                 }]
             },
@@ -175,22 +344,35 @@
         });
     }
 
-    function renderList() {
-        const list = document.getElementById('transactionList');
+    // 리스트 렌더링 (공통 함수)
+    function renderList(dataArray, elementId, targetBank = null) {
+        const list = document.getElementById(elementId);
         list.innerHTML = '';
 
-        transactions.forEach(t => {
+        dataArray.forEach(t => {
             const li = document.createElement('li');
             li.className = 'transaction-item';
             
-            let sign = t.type === 'expense' ? '-' : (t.type === 'income' ? '+' : '↔');
-            let colorClass = t.type === 'expense' ? 'expense' : (t.type === 'income' ? 'income' : '');
+            let sign = '';
+            let colorClass = '';
             let bankInfo = t.type === 'transfer' ? `${t.bank} ➔ ${t.toBank}` : t.bank;
+
+            // 특정 은행 상세 조회일 때 이체 금액 부호 논리 조정
+            if (targetBank && t.type === 'transfer') {
+                if (t.bank === targetBank) {
+                    sign = '-'; colorClass = 'expense';
+                } else if (t.toBank === targetBank) {
+                    sign = '+'; colorClass = 'income';
+                }
+            } else {
+                sign = t.type === 'expense' ? '-' : (t.type === 'income' ? '+' : '');
+                colorClass = t.type === 'expense' ? 'expense' : (t.type === 'income' ? 'income' : '');
+            }
 
             li.innerHTML = `
                 <div class="item-info">
                     <span class="item-title">${t.category} <span style="font-weight:normal; color:#888; font-size:0.9em;">(${bankInfo})</span></span>
-                    <span class="item-date">${t.date.replace('T', ' ')} | ${t.note}</span>
+                    <span class="item-date">${t.date} | ${t.note || ''}</span>
                 </div>
                 <div class="item-amount ${colorClass}">${sign}${t.amount.toLocaleString()}원</div>
             `;
@@ -198,7 +380,103 @@
         });
     }
 
-    function openModal() { document.getElementById('inputModal').style.display = 'flex'; }
+    // 통계 기능
+    function renderStats(period, btnElement) {
+        if(btnElement) {
+            document.querySelectorAll('#statsBtnGroup button').forEach(b => b.classList.remove('active'));
+            btnElement.classList.add('active');
+        }
+
+        const statsMap = {};
+        transactions.forEach(t => {
+            if (t.type === 'transfer') return; // 이체는 통계에서 제외
+
+            let key = '';
+            if (period === 'day') key = t.date.substring(0, 10);
+            else if (period === 'month') key = t.date.substring(0, 7);
+            else if (period === 'year') key = t.date.substring(0, 4);
+            else if (period === 'category') key = t.category;
+
+            if (!statsMap[key]) statsMap[key] = { income: 0, expense: 0 };
+            
+            if (t.type === 'income') statsMap[key].income += t.amount;
+            if (t.type === 'expense') statsMap[key].expense += t.amount;
+        });
+
+        const container = document.getElementById('statsContent');
+        container.innerHTML = '';
+
+        // 날짜/이름 순으로 정렬
+        const sortedKeys = Object.keys(statsMap).sort((a, b) => b.localeCompare(a));
+
+        sortedKeys.forEach(key => {
+            const s = statsMap[key];
+            const div = document.createElement('div');
+            div.className = 'stat-row';
+            div.innerHTML = `
+                <div class="stat-label">${key}</div>
+                <div class="stat-values">
+                    <span class="income">+${s.income.toLocaleString()}원</span>
+                    <span class="expense">-${s.expense.toLocaleString()}원</span>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+        
+        if(sortedKeys.length === 0) {
+            container.innerHTML = '<p style="text-align:center; color:#888;">내역이 없습니다.</p>';
+        }
+    }
+
+    // 탭 전환
+    function switchMainTab(tab) {
+        document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+        document.getElementById('navMain').classList.remove('active');
+        document.getElementById('navStats').classList.remove('active');
+
+        if (tab === 'main') {
+            document.getElementById('view-main').classList.add('active');
+            document.getElementById('navMain').classList.add('active');
+            updateDashboard();
+        } else if (tab === 'stats') {
+            document.getElementById('view-stats').classList.add('active');
+            document.getElementById('navStats').classList.add('active');
+            renderStats('day', document.querySelector('#statsBtnGroup button'));
+        }
+    }
+
+    function exportData() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(transactions));
+        const anchor = document.createElement('a');
+        anchor.href = dataStr;
+        anchor.download = "가계부백업.json";
+        anchor.click();
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (Array.isArray(imported)) {
+                    transactions = imported;
+                    localStorage.setItem('ledger_data', JSON.stringify(transactions));
+                    updateDashboard();
+                    alert('데이터를 성공적으로 불러왔습니다.');
+                }
+            } catch (err) {
+                alert('파일을 읽는 데 실패했습니다.');
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function openModal() { 
+        document.getElementById('date').value = getFormattedDate();
+        document.getElementById('inputModal').style.display = 'flex'; 
+    }
     function closeModal() { document.getElementById('inputModal').style.display = 'none'; }
 
     init();
