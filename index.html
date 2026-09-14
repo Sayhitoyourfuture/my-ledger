@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>내 가계부</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 20px; color: #333; padding-bottom: 80px; }
+        .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
+        h2 { margin-top: 0; font-size: 1.2rem; color: #555; }
+        .total-balance { font-size: 2rem; font-weight: bold; margin-bottom: 20px; text-align: center; }
+        .chart-container { position: relative; height: 250px; width: 100%; margin-bottom: 30px; }
+        .btn-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-group button { flex: 1; padding: 10px; border: none; border-radius: 8px; background: #eee; cursor: pointer; font-weight: bold; }
+        .btn-group button.active { background: #007aff; color: white; }
+        .transaction-list { list-style: none; padding: 0; margin: 0; }
+        .transaction-item { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #eee; }
+        .transaction-item:last-child { border-bottom: none; }
+        .item-info { display: flex; flex-direction: column; gap: 4px; }
+        .item-title { font-weight: bold; }
+        .item-date { font-size: 0.8rem; color: #888; }
+        .item-amount { font-weight: bold; }
+        .income { color: #34c759; }
+        .expense { color: #ff3b30; }
+        
+        /* Modal & FAB */
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: #007aff; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; box-shadow: 0 4px 12px rgba(0,122,255,0.4); cursor: pointer; border: none; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 16px; width: 90%; max-width: 400px; display: flex; flex-direction: column; gap: 15px; }
+        .modal-content input, .modal-content select { padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 10px; }
+        .btn-save { background: #007aff; color: white; border: none; padding: 12px; border-radius: 8px; flex: 1; font-weight: bold; }
+        .btn-cancel { background: #eee; color: #333; border: none; padding: 12px; border-radius: 8px; flex: 1; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>총 잔액</h2>
+    <div class="total-balance" id="totalBalance">0원</div>
+    
+    <div class="chart-container">
+        <canvas id="balanceChart"></canvas>
+    </div>
+
+    <div class="btn-group">
+        <button class="active">전체</button>
+        <button>일별</button>
+        <button>월별</button>
+    </div>
+
+    <ul class="transaction-list" id="transactionList">
+        <!-- 거래 내역이 여기에 렌더링됨 -->
+    </ul>
+</div>
+
+<button class="fab" onclick="openModal()">+</button>
+
+<div class="modal" id="inputModal">
+    <div class="modal-content">
+        <select id="type" onchange="toggleTransferBank()">
+            <option value="expense">지출</option>
+            <option value="income">수입</option>
+            <option value="transfer">이체</option>
+        </select>
+        <input type="datetime-local" id="date">
+        <input type="number" id="amount" placeholder="금액 (숫자만)">
+        <input type="text" id="category" placeholder="항목 (예: 식비, 월급)">
+        <select id="bank">
+            <option value="00은행">00은행</option>
+            <option value="토스뱅크">토스뱅크</option>
+            <option value="국민은행">국민은행</option>
+        </select>
+        <select id="toBank" style="display: none;">
+            <option value="토스뱅크">토스뱅크</option>
+            <option value="00은행">00은행</option>
+            <option value="국민은행">국민은행</option>
+        </select>
+        <input type="text" id="note" placeholder="비고 (선택사항)">
+        
+        <div class="modal-buttons">
+            <button class="btn-cancel" onclick="closeModal()">취소</button>
+            <button class="btn-save" onclick="saveTransaction()">저장</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    let transactions = JSON.parse(localStorage.getItem('ledger_data')) || [];
+    let chartInstance = null;
+
+    function init() {
+        document.getElementById('date').value = new Date().toISOString().slice(0, 16);
+        updateDashboard();
+    }
+
+    function toggleTransferBank() {
+        const type = document.getElementById('type').value;
+        const toBank = document.getElementById('toBank');
+        toBank.style.display = type === 'transfer' ? 'block' : 'none';
+    }
+
+    function saveTransaction() {
+        const type = document.getElementById('type').value;
+        const data = {
+            id: Date.now(),
+            type: type,
+            date: document.getElementById('date').value,
+            amount: parseInt(document.getElementById('amount').value),
+            category: document.getElementById('category').value,
+            bank: document.getElementById('bank').value,
+            toBank: type === 'transfer' ? document.getElementById('toBank').value : null,
+            note: document.getElementById('note').value
+        };
+
+        if (!data.amount || !data.category) {
+            alert('금액과 항목을 입력해.');
+            return;
+        }
+
+        transactions.unshift(data); // 최신 항목을 위로
+        localStorage.setItem('ledger_data', JSON.stringify(transactions));
+        
+        closeModal();
+        updateDashboard();
+        
+        // 입력창 초기화
+        document.getElementById('amount').value = '';
+        document.getElementById('category').value = '';
+        document.getElementById('note').value = '';
+    }
+
+    function updateDashboard() {
+        let balances = { '00은행': 0, '토스뱅크': 0, '국민은행': 0 };
+        let total = 0;
+
+        // 잔액 계산 로직
+        transactions.forEach(t => {
+            if (t.type === 'income') {
+                balances[t.bank] += t.amount;
+                total += t.amount;
+            } else if (t.type === 'expense') {
+                balances[t.bank] -= t.amount;
+                total -= t.amount;
+            } else if (t.type === 'transfer') {
+                balances[t.bank] -= t.amount;
+                balances[t.toBank] += t.amount;
+            }
+        });
+
+        document.getElementById('totalBalance').innerText = total.toLocaleString() + '원';
+        drawChart(balances);
+        renderList();
+    }
+
+    function drawChart(balances) {
+        const ctx = document.getElementById('balanceChart').getContext('2d');
+        const labels = Object.keys(balances);
+        const data = Object.values(balances);
+
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: ['#007aff', '#34c759', '#ffcc00'],
+                    borderWidth: 0
+                }]
+            },
+            options: { responsive: true, maintainAspectRatio: false }
+        });
+    }
+
+    function renderList() {
+        const list = document.getElementById('transactionList');
+        list.innerHTML = '';
+
+        transactions.forEach(t => {
+            const li = document.createElement('li');
+            li.className = 'transaction-item';
+            
+            let sign = t.type === 'expense' ? '-' : (t.type === 'income' ? '+' : '↔');
+            let colorClass = t.type === 'expense' ? 'expense' : (t.type === 'income' ? 'income' : '');
+            let bankInfo = t.type === 'transfer' ? `${t.bank} ➔ ${t.toBank}` : t.bank;
+
+            li.innerHTML = `
+                <div class="item-info">
+                    <span class="item-title">${t.category} <span style="font-weight:normal; color:#888; font-size:0.9em;">(${bankInfo})</span></span>
+                    <span class="item-date">${t.date.replace('T', ' ')} | ${t.note}</span>
+                </div>
+                <div class="item-amount ${colorClass}">${sign}${t.amount.toLocaleString()}원</div>
+            `;
+            list.appendChild(li);
+        });
+    }
+
+    function openModal() { document.getElementById('inputModal').style.display = 'flex'; }
+    function closeModal() { document.getElementById('inputModal').style.display = 'none'; }
+
+    init();
+</script>
+
+</body>
+</html>
