@@ -34,12 +34,18 @@
         .btn-group button.active { background: #007aff; color: white; }
 
         .transaction-list { list-style: none; padding: 0; margin: 0; }
-        .transaction-item { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #eee; }
+        .transaction-item { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #eee; align-items: center; }
         .transaction-item:last-child { border-bottom: none; }
-        .item-info { display: flex; flex-direction: column; gap: 4px; }
+        
+        .item-main { flex: 1; display: flex; flex-direction: column; gap: 4px; }
         .item-title { font-weight: bold; }
         .item-date { font-size: 0.8rem; color: #888; }
-        .item-amount { font-weight: bold; }
+        
+        .item-actions { display: flex; gap: 6px; margin-top: 6px; }
+        .action-btn { background: #f0f0f0; border: none; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; cursor: pointer; font-weight: bold; color: #555; }
+        .action-btn.delete { background: #ffe5e5; color: #ff3b30; }
+
+        .item-amount { font-weight: bold; margin-left: 10px; white-space: nowrap; }
         .income { color: #34c759; }
         .expense { color: #ff3b30; }
         
@@ -137,7 +143,7 @@
         
         <div class="modal-buttons">
             <button class="btn-cancel" onclick="closeModal()">취소</button>
-            <button class="btn-save" onclick="saveTransaction()">저장</button>
+            <button class="btn-save" id="saveBtn" onclick="saveTransaction()">저장</button>
         </div>
     </div>
 </div>
@@ -146,6 +152,7 @@
     let transactions = JSON.parse(localStorage.getItem('ledger_data')) || [];
     let bankColors = JSON.parse(localStorage.getItem('bank_colors')) || {};
     let chartInstance = null;
+    let editTargetId = null; // 수정 중인 내역의 ID를 추적합니다.
 
     function init() {
         updateDashboard();
@@ -164,10 +171,11 @@
         toBank.style.display = type === 'transfer' ? 'block' : 'none';
     }
 
-    // 특정 은행의 현재 잔액 계산 함수
-    function getBankBalance(bankName) {
+    // 수정 중인 내역을 제외하고 특정 은행의 현재 잔액을 계산합니다.
+    function getBankBalance(bankName, excludeId = null) {
         let bal = 0;
         transactions.forEach(t => {
+            if (t.id === excludeId) return; // 수정 중인 기존 금액은 임시로 뺍니다.
             if (t.bank === bankName) {
                 if (t.type === 'income') bal += t.amount;
                 else if (t.type === 'expense' || t.type === 'transfer') bal -= t.amount;
@@ -186,7 +194,7 @@
         const bank = document.getElementById('bank').value.trim();
         const toBank = document.getElementById('toBank').value.trim();
 
-        // 수동 날짜 유효성 검사
+        // 날짜 유효성 검사
         const dateRegex = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/;
         if (!dateRegex.test(dateVal)) {
             alert('날짜를 YYYY-MM-DD HH:MM 형식으로 정확히 입력해 주세요.');
@@ -204,7 +212,7 @@
 
         // 잔액 부족 검증 (지출, 이체 시)
         if (type === 'expense' || type === 'transfer') {
-            const currentBal = getBankBalance(bank);
+            const currentBal = getBankBalance(bank, editTargetId);
             if (amount > currentBal) {
                 alert(`잔액이 부족합니다.\n현재 ${bank} 잔액: ${currentBal.toLocaleString()}원\n입력 금액: ${amount.toLocaleString()}원`);
                 return;
@@ -212,7 +220,7 @@
         }
 
         const data = {
-            id: Date.now(),
+            id: editTargetId ? editTargetId : Date.now(),
             type: type,
             date: dateVal,
             amount: amount,
@@ -222,21 +230,51 @@
             note: document.getElementById('note').value
         };
 
-        // 최신 날짜 순으로 정렬하기 위해 추가 후 정렬
-        transactions.push(data);
+        if (editTargetId) {
+            // 기존 데이터 수정
+            const idx = transactions.findIndex(t => t.id === editTargetId);
+            if (idx > -1) transactions[idx] = data;
+        } else {
+            // 새 데이터 추가
+            transactions.push(data);
+        }
+
+        // 최신 날짜 순으로 정렬
         transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
-        
         localStorage.setItem('ledger_data', JSON.stringify(transactions));
         
         closeModal();
         updateDashboard();
+    }
+
+    function deleteTransaction(id) {
+        if (!confirm('정말 이 내역을 삭제하시겠습니까?')) return;
+        transactions = transactions.filter(t => t.id !== id);
+        localStorage.setItem('ledger_data', JSON.stringify(transactions));
+        updateDashboard();
+    }
+
+    function openEditModal(id) {
+        const t = transactions.find(x => x.id === id);
+        if (!t) return;
         
-        // 입력창 초기화
-        document.getElementById('amount').value = '';
-        document.getElementById('category').value = '';
-        document.getElementById('note').value = '';
-        document.getElementById('bank').value = '';
-        document.getElementById('toBank').value = '';
+        editTargetId = id;
+
+        document.getElementById('type').value = t.type;
+        toggleTransferBank();
+        
+        document.getElementById('date').value = t.date;
+        document.getElementById('amount').value = t.amount;
+        document.getElementById('category').value = t.category;
+        document.getElementById('bank').value = t.bank;
+        
+        if (t.type === 'transfer') {
+            document.getElementById('toBank').value = t.toBank;
+        }
+        document.getElementById('note').value = t.note || '';
+
+        document.getElementById('saveBtn').innerText = '수정';
+        document.getElementById('inputModal').style.display = 'flex';
     }
 
     function updateDashboard() {
@@ -283,6 +321,12 @@
         renderBankCards(filteredBalances);
         renderList(transactions, 'transactionList');
         
+        // 특정 은행 뷰가 켜져 있다면 해당 내역도 갱신합니다.
+        const detailBankName = document.getElementById('detailBankName').innerText;
+        if (document.getElementById('view-bankDetail').classList.contains('active') && detailBankName) {
+            openBankDetail(detailBankName, filteredBalances[detailBankName] || 0);
+        }
+
         // 현재 통계 화면이 열려있다면 새로고침
         if(document.getElementById('view-stats').classList.contains('active')) {
             const activeBtn = document.querySelector('#statsBtnGroup button.active');
@@ -370,9 +414,13 @@
             }
 
             li.innerHTML = `
-                <div class="item-info">
+                <div class="item-main">
                     <span class="item-title">${t.category} <span style="font-weight:normal; color:#888; font-size:0.9em;">(${bankInfo})</span></span>
                     <span class="item-date">${t.date} | ${t.note || ''}</span>
+                    <div class="item-actions">
+                        <button class="action-btn" onclick="openEditModal(${t.id})">수정</button>
+                        <button class="action-btn delete" onclick="deleteTransaction(${t.id})">삭제</button>
+                    </div>
                 </div>
                 <div class="item-amount ${colorClass}">${sign}${t.amount.toLocaleString()}원</div>
             `;
@@ -474,9 +522,22 @@
     }
 
     function openModal() { 
+        editTargetId = null; // 새 내역 추가 모드
+        document.getElementById('saveBtn').innerText = '저장';
+        
+        document.getElementById('type').value = 'expense';
+        toggleTransferBank();
+        
         document.getElementById('date').value = getFormattedDate();
+        document.getElementById('amount').value = '';
+        document.getElementById('category').value = '';
+        document.getElementById('bank').value = '';
+        document.getElementById('toBank').value = '';
+        document.getElementById('note').value = '';
+
         document.getElementById('inputModal').style.display = 'flex'; 
     }
+    
     function closeModal() { document.getElementById('inputModal').style.display = 'none'; }
 
     init();
